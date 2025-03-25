@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Mic, MicOff, X, MessageSquare, RefreshCw, User } from 'lucide-react';
 import './ChatWidget.css';
@@ -23,6 +24,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const botName = "Taylor";
 
   // Scroll to bottom when messages change
@@ -45,6 +47,18 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     }
   }, [messages]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.abort();
+      }
+    };
+  }, []);
+
   const toggleWidget = () => {
     setIsMinimized(!isMinimized);
     if (isMinimized) {
@@ -54,6 +68,9 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
 
   const handleClose = () => {
     setIsOpen(false);
+    if (isRecording) {
+      stopRecording();
+    }
     setTimeout(() => setIsMinimized(true), 300); // Wait for animation to complete
   };
 
@@ -119,6 +136,20 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     }
   };
 
+  // Reset silence timer when speech is detected
+  const resetSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    
+    silenceTimerRef.current = setTimeout(() => {
+      console.log("No speech detected for 2 seconds, stopping recording");
+      if (isRecording) {
+        stopRecording();
+      }
+    }, 2000); // 2 seconds of silence
+  };
+
   const startRecording = async () => {
     try {
       // Initialize Web Speech API
@@ -151,27 +182,40 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
         
         // Update input with current transcription
         setInputText(finalTranscript || interimTranscript);
+        
+        // Reset the silence timer since we detected speech
+        resetSilenceTimer();
       };
       
       recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
         setIsTranscribing(false);
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+        }
       };
       
       recognition.onend = () => {
-        // Only end recording if we're still in recording state
-        // This prevents ending when there's a temporary pause in speech
-        if (isRecording) {
-          setIsRecording(false);
-          setIsTranscribing(false);
-          
-          // Send the final transcript if it's not empty
-          if (finalTranscript.trim()) {
-            sendMessage(finalTranscript);
-          }
+        // Only process if we're still in recording state
+        // This prevents processing when there's a stop called programmatically
+        console.log("Speech recognition ended, recording state:", isRecording);
+        
+        setIsRecording(false);
+        setIsTranscribing(false);
+        
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+        }
+        
+        // Only send the message if we have a transcript and we didn't manually stop
+        if (finalTranscript.trim()) {
+          sendMessage(finalTranscript);
         }
       };
+      
+      // Start the silence timer
+      resetSilenceTimer();
       
       recognition.start();
       speechRecognitionRef.current = recognition;
@@ -298,14 +342,22 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   };
 
   const stopRecording = () => {
-    if (speechRecognitionRef.current && isTranscribing) {
-      speechRecognitionRef.current.stop();
-      setIsTranscribing(false);
-      // The onend handler will take care of sending the message
-    } else if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    console.log("Stopping recording. IsTranscribing:", isTranscribing, "IsRecording:", isRecording);
+    
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
+    
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      // The onend handler will take care of the rest
+    } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    setIsRecording(false);
+    setIsTranscribing(false);
   };
 
   const formatTime = (date: Date): string => {
