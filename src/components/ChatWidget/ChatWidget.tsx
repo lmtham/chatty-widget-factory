@@ -19,9 +19,11 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const botName = "Taylor";
 
   // Scroll to bottom when messages change
@@ -120,120 +122,188 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Initialize Web Speech API
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      if (!SpeechRecognition) {
+        throw new Error("Speech recognition not supported in this browser");
+      }
       
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      
+      let finalTranscript = '';
+      let interimTranscript = '';
+      
+      recognition.onresult = (event) => {
+        interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        // Update input with current transcription
+        setInputText(finalTranscript || interimTranscript);
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+        setIsTranscribing(false);
+      };
+      
+      recognition.onend = () => {
+        // Only end recording if we're still in recording state
+        // This prevents ending when there's a temporary pause in speech
+        if (isRecording) {
+          setIsRecording(false);
+          setIsTranscribing(false);
+          
+          // Send the final transcript if it's not empty
+          if (finalTranscript.trim()) {
+            sendMessage(finalTranscript);
+          }
         }
       };
       
-      mediaRecorder.onstop = async () => {
-        // Convert audio chunks to blob and then to base64
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      recognition.start();
+      speechRecognitionRef.current = recognition;
+      setIsRecording(true);
+      setIsTranscribing(true);
+      
+    } catch (error) {
+      console.error('Error starting speech recognition:', error);
+      
+      // Fall back to audio recording if speech recognition is not available
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        // Add a "processing" message
-        const processingMessage: Message = {
-          content: "Processing your voice message...",
-          isUser: false,
-          timestamp: new Date()
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
         };
-        setMessages(prev => [...prev, processingMessage]);
         
-        try {
-          // For this demo, we'll just convert to base64 and log it
-          // In a real app, you would send this to your speech-to-text service
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = async () => {
-            const base64Audio = reader.result as string;
+        mediaRecorder.onstop = async () => {
+          // Add a "processing" message
+          const processingMessage: Message = {
+            content: "Processing your voice message...",
+            isUser: false,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, processingMessage]);
+          
+          try {
+            // Convert audio chunks to blob and then to base64
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
             
-            // For demo purposes, we'll just send a placeholder message
-            const transcription = "This is where your voice transcription would appear";
+            // In a real app, you would send this to a speech-to-text service
+            // For demo, we'll send the audio to the webhook
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+              const base64Audio = reader.result as string;
+              
+              // Since we don't have a real transcription service here,
+              // we'll just use a placeholder message
+              const transcription = "Voice message received (speech-to-text not available in this browser)";
+              
+              // Remove the processing message
+              setMessages(prev => prev.filter(msg => msg !== processingMessage));
+              
+              // Add the transcribed message as a user message
+              const userMessage: Message = {
+                content: transcription,
+                isUser: true,
+                timestamp: new Date()
+              };
+              setMessages(prev => [...prev, userMessage]);
+              
+              // Send to n8n webhook
+              try {
+                await fetch(n8nWebhookURL, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    message: transcription,
+                    audioData: base64Audio,
+                    type: 'audio',
+                    timestamp: new Date().toISOString()
+                  }),
+                });
+                
+                // Add a response from the bot
+                setTimeout(() => {
+                  const botMessage: Message = {
+                    content: "I've received your voice message and I'm processing it.",
+                    isUser: false,
+                    timestamp: new Date()
+                  };
+                  setMessages(prev => [...prev, botMessage]);
+                }, 500);
+              } catch (error) {
+                console.error('Error sending audio:', error);
+                const errorMessage: Message = {
+                  content: "Sorry, there was an error processing your voice message.",
+                  isUser: false,
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, errorMessage]);
+              }
+            };
+          } catch (error) {
+            console.error('Error processing audio:', error);
             
             // Remove the processing message
             setMessages(prev => prev.filter(msg => msg !== processingMessage));
             
-            // Add the transcribed message as a user message
-            const userMessage: Message = {
-              content: transcription,
-              isUser: true,
+            const errorMessage: Message = {
+              content: "Sorry, there was an error processing your voice message.",
+              isUser: false,
               timestamp: new Date()
             };
-            setMessages(prev => [...prev, userMessage]);
-            
-            // Send the transcribed message to n8n webhook
-            try {
-              await fetch(n8nWebhookURL, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  message: transcription,
-                  audioData: base64Audio,
-                  type: 'audio',
-                  timestamp: new Date().toISOString()
-                }),
-              });
-              
-              // Add a response from the bot
-              setTimeout(() => {
-                const botMessage: Message = {
-                  content: "I've received your voice message and I'm processing it.",
-                  isUser: false,
-                  timestamp: new Date()
-                };
-                setMessages(prev => [...prev, botMessage]);
-              }, 500);
-            } catch (error) {
-              console.error('Error sending audio:', error);
-              const errorMessage: Message = {
-                content: "Sorry, there was an error processing your voice message.",
-                isUser: false,
-                timestamp: new Date()
-              };
-              setMessages(prev => [...prev, errorMessage]);
-            }
-          };
-        } catch (error) {
-          console.error('Error processing audio:', error);
+            setMessages(prev => [...prev, errorMessage]);
+          }
           
-          // Remove the processing message
-          setMessages(prev => prev.filter(msg => msg !== processingMessage));
-          
-          const errorMessage: Message = {
-            content: "Sorry, there was an error processing your voice message.",
-            isUser: false,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, errorMessage]);
-        }
+          // Stop all audio tracks
+          stream.getTracks().forEach(track => track.stop());
+        };
         
-        // Stop all audio tracks
-        stream.getTracks().forEach(track => track.stop());
-      };
-      
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-      
-      const errorMessage: Message = {
-        content: "Sorry, I couldn't access your microphone. Please check your browser permissions.",
-        isUser: false,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch (microError) {
+        console.error('Error accessing microphone:', microError);
+        
+        const errorMessage: Message = {
+          content: "Sorry, I couldn't access your microphone. Please check your browser permissions.",
+          isUser: false,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (speechRecognitionRef.current && isTranscribing) {
+      speechRecognitionRef.current.stop();
+      setIsTranscribing(false);
+      // The onend handler will take care of sending the message
+    } else if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }

@@ -1,4 +1,3 @@
-
 (function() {
   // Configuration
   let n8nWebhookURL = 'YOUR_N8N_WEBHOOK_URL';
@@ -286,7 +285,7 @@
     messageSquare: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
     send: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
     mic: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>',
-    micOff: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>',
+    micOff: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
     x: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
     user: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
     refreshCw: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>'
@@ -320,6 +319,8 @@
     let mediaRecorder = null;
     let audioChunks = [];
     let isRecording = false;
+    let isTranscribing = false;
+    let speechRecognition = null;
     const botName = "Taylor";
     
     // Add the initial message from the bot
@@ -356,6 +357,11 @@
       isOpen = false;
       container.classList.remove('open');
       container.classList.add('closing');
+      
+      // Stop recording if active when closing
+      if (isRecording) {
+        stopRecording();
+      }
       
       setTimeout(() => {
         container.style.display = 'none';
@@ -404,6 +410,7 @@
                 type="text" 
                 placeholder="Type your message..." 
                 ${isRecording ? 'disabled' : ''}
+                value="${isTranscribing ? '...' : ''}"
               />
               <button 
                 class="chat-widget-send-button" 
@@ -534,6 +541,68 @@
     
     async function startRecording() {
       try {
+        // Try to use the Web Speech API for speech recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+          
+          let finalTranscript = '';
+          let interimTranscript = '';
+          
+          recognition.onresult = (event) => {
+            interimTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript;
+              
+              if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+              } else {
+                interimTranscript += transcript;
+              }
+            }
+            
+            // Show current transcription in the input field
+            const input = container.querySelector('.chat-widget-input input');
+            if (input) {
+              input.value = finalTranscript || interimTranscript;
+            }
+          };
+          
+          recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            isRecording = false;
+            isTranscribing = false;
+            renderWidget();
+          };
+          
+          recognition.onend = () => {
+            // Only end if we're still in recording state
+            if (isRecording) {
+              isRecording = false;
+              isTranscribing = false;
+              
+              // Send the final transcript if it's not empty
+              if (finalTranscript.trim()) {
+                sendMessage(finalTranscript);
+              }
+              renderWidget();
+            }
+          };
+          
+          recognition.start();
+          speechRecognition = recognition;
+          isRecording = true;
+          isTranscribing = true;
+          renderWidget();
+          return;
+        }
+        
+        // Fall back to audio recording if speech recognition is not available
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
         mediaRecorder = new MediaRecorder(stream);
@@ -546,9 +615,6 @@
         };
         
         mediaRecorder.onstop = async () => {
-          // Convert audio chunks to blob
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          
           // Add a "processing" message
           const processingMessageIndex = messages.length;
           messages.push({
@@ -561,13 +627,14 @@
           try {
             // For this demo, we'll just convert to base64 and log it
             // In a real app, you would send this to your speech-to-text service
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = async () => {
               const base64Audio = reader.result;
               
-              // For demo purposes, we'll just send a placeholder message
-              const transcription = "This is where your voice transcription would appear";
+              // Since we don't have real transcription, use a placeholder
+              const transcription = "Voice message received (speech-to-text not available in this browser)";
               
               // Remove the processing message
               messages.splice(processingMessageIndex, 1);
@@ -648,7 +715,11 @@
     }
     
     function stopRecording() {
-      if (mediaRecorder && isRecording) {
+      if (speechRecognition && isTranscribing) {
+        speechRecognition.stop();
+        isTranscribing = false;
+        // The onend handler will finish processing
+      } else if (mediaRecorder && isRecording) {
         mediaRecorder.stop();
         isRecording = false;
         renderWidget();
