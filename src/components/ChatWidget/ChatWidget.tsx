@@ -1,7 +1,11 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, MicOff, X, MessageSquare, RefreshCw, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageSquare } from 'lucide-react';
 import './ChatWidget.css';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
+import MessageList from './MessageList';
+import ChatInput from './ChatInput';
+import ChatHeader from './ChatHeader';
 
 interface Message {
   content: string;
@@ -16,23 +20,9 @@ interface ChatWidgetProps {
 const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const botName = "Taylor";
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
 
   // Add initial welcome message
   useEffect(() => {
@@ -47,17 +37,14 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     }
   }, [messages]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-      if (speechRecognitionRef.current) {
-        speechRecognitionRef.current.abort();
-      }
-    };
-  }, []);
+  const { isRecording, isTranscribing, startRecording, stopRecording } = useSpeechRecognition({
+    onTranscription: (text) => {
+      setInputText(text);
+    },
+    onFinalTranscript: (text) => {
+      sendMessage(text);
+    }
+  });
 
   const toggleWidget = () => {
     setIsMinimized(!isMinimized);
@@ -136,234 +123,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     }
   };
 
-  // Reset silence timer when speech is detected
-  const resetSilenceTimer = () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    
-    silenceTimerRef.current = setTimeout(() => {
-      console.log("No speech detected for 2 seconds, stopping recording");
-      if (isRecording) {
-        stopRecording();
-      }
-    }, 2000); // 2 seconds of silence
-  };
-
-  const startRecording = async () => {
-    try {
-      // Initialize Web Speech API
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (!SpeechRecognitionAPI) {
-        throw new Error("Speech recognition not supported in this browser");
-      }
-      
-      const recognition = new SpeechRecognitionAPI();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-      
-      let finalTranscript = '';
-      let interimTranscript = '';
-      
-      recognition.onresult = (event) => {
-        interimTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-        
-        // Update input with current transcription
-        setInputText(finalTranscript || interimTranscript);
-        
-        // Reset the silence timer since we detected speech
-        resetSilenceTimer();
-      };
-      
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsRecording(false);
-        setIsTranscribing(false);
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-      };
-      
-      recognition.onend = () => {
-        // Only process if we're still in recording state
-        // This prevents processing when there's a stop called programmatically
-        console.log("Speech recognition ended, recording state:", isRecording);
-        
-        setIsRecording(false);
-        setIsTranscribing(false);
-        
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-        
-        // Only send the message if we have a transcript and we didn't manually stop
-        if (finalTranscript.trim()) {
-          sendMessage(finalTranscript);
-        }
-      };
-      
-      // Start the silence timer
-      resetSilenceTimer();
-      
-      recognition.start();
-      speechRecognitionRef.current = recognition;
-      setIsRecording(true);
-      setIsTranscribing(true);
-      
-    } catch (error) {
-      console.error('Error starting speech recognition:', error);
-      
-      // Fall back to audio recording if speech recognition is not available
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        audioChunksRef.current = [];
-        
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-        
-        mediaRecorder.onstop = async () => {
-          // Add a "processing" message
-          const processingMessage: Message = {
-            content: "Processing your voice message...",
-            isUser: false,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, processingMessage]);
-          
-          try {
-            // Convert audio chunks to blob and then to base64
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            
-            // In a real app, you would send this to a speech-to-text service
-            // For demo, we'll send the audio to the webhook
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-              const base64Audio = reader.result as string;
-              
-              // Since we don't have a real transcription service here,
-              // we'll just use a placeholder message
-              const transcription = "Voice message received (speech-to-text not available in this browser)";
-              
-              // Remove the processing message
-              setMessages(prev => prev.filter(msg => msg !== processingMessage));
-              
-              // Add the transcribed message as a user message
-              const userMessage: Message = {
-                content: transcription,
-                isUser: true,
-                timestamp: new Date()
-              };
-              setMessages(prev => [...prev, userMessage]);
-              
-              // Send to n8n webhook
-              try {
-                await fetch(n8nWebhookURL, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    message: transcription,
-                    audioData: base64Audio,
-                    type: 'audio',
-                    timestamp: new Date().toISOString()
-                  }),
-                });
-                
-                // Add a response from the bot
-                setTimeout(() => {
-                  const botMessage: Message = {
-                    content: "I've received your voice message and I'm processing it.",
-                    isUser: false,
-                    timestamp: new Date()
-                  };
-                  setMessages(prev => [...prev, botMessage]);
-                }, 500);
-              } catch (error) {
-                console.error('Error sending audio:', error);
-                const errorMessage: Message = {
-                  content: "Sorry, there was an error processing your voice message.",
-                  isUser: false,
-                  timestamp: new Date()
-                };
-                setMessages(prev => [...prev, errorMessage]);
-              }
-            };
-          } catch (error) {
-            console.error('Error processing audio:', error);
-            
-            // Remove the processing message
-            setMessages(prev => prev.filter(msg => msg !== processingMessage));
-            
-            const errorMessage: Message = {
-              content: "Sorry, there was an error processing your voice message.",
-              isUser: false,
-              timestamp: new Date()
-            };
-            setMessages(prev => [...prev, errorMessage]);
-          }
-          
-          // Stop all audio tracks
-          stream.getTracks().forEach(track => track.stop());
-        };
-        
-        mediaRecorder.start();
-        setIsRecording(true);
-      } catch (microError) {
-        console.error('Error accessing microphone:', microError);
-        
-        const errorMessage: Message = {
-          content: "Sorry, I couldn't access your microphone. Please check your browser permissions.",
-          isUser: false,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
-    }
-  };
-
-  const stopRecording = () => {
-    console.log("Stopping recording. IsTranscribing:", isTranscribing, "IsRecording:", isRecording);
-    
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    
-    if (speechRecognitionRef.current) {
-      speechRecognitionRef.current.stop();
-      // The onend handler will take care of the rest
-    } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    
-    setIsRecording(false);
-    setIsTranscribing(false);
-  };
-
-  const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   if (!isOpen && isMinimized) {
     return (
       <div className="chat-widget-bubble" onClick={toggleWidget}>
@@ -374,74 +133,21 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
 
   return (
     <div className={`chat-widget-container ${isOpen ? 'open' : 'closing'}`}>
-      <div className="chat-widget-header">
-        <div className="chat-widget-title">Google</div>
-        <div className="chat-widget-controls">
-          <User className="chat-widget-control-icon" />
-          <RefreshCw className="chat-widget-control-icon" />
-          <X className="chat-widget-control-icon" onClick={handleClose} />
-        </div>
-      </div>
+      <ChatHeader handleClose={handleClose} />
       
       {!isMinimized && (
         <>
-          <div className="chat-widget-messages">
-            {messages.map((message, index) => (
-              <div 
-                key={index} 
-                className={`chat-widget-message ${message.isUser ? 'user' : 'bot'}`}
-              >
-                {!message.isUser && (
-                  <div className="chat-widget-bot-header">
-                    <div className="chat-widget-bot-avatar">
-                      <User size={18} />
-                    </div>
-                    <div className="chat-widget-bot-name">{botName}</div>
-                  </div>
-                )}
-                <div className="chat-widget-message-content">{message.content}</div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
+          <MessageList messages={messages} botName={botName} />
           
-          <div className="chat-widget-input">
-            <div className="chat-widget-input-container">
-              {isRecording ? (
-                <button 
-                  className="chat-widget-mic-button recording" 
-                  onClick={stopRecording}
-                  aria-label="Stop recording"
-                >
-                  <MicOff size={18} />
-                </button>
-              ) : (
-                <button 
-                  className="chat-widget-mic-button"
-                  onClick={startRecording}
-                  aria-label="Start recording"
-                >
-                  <Mic size={18} />
-                </button>
-              )}
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isRecording}
-              />
-              <button 
-                className="chat-widget-send-button"
-                onClick={handleSendClick}
-                disabled={!inputText.trim() || isRecording}
-                aria-label="Send message"
-              >
-                <Send size={18} />
-              </button>
-            </div>
-          </div>
+          <ChatInput 
+            inputText={inputText}
+            setInputText={setInputText}
+            isRecording={isRecording}
+            startRecording={startRecording}
+            stopRecording={stopRecording}
+            sendMessage={handleSendClick}
+            handleKeyDown={handleKeyDown}
+          />
           
           <div className="chat-widget-footer">
             Add AI chat to your site
