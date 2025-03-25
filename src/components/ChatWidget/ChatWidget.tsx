@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, MicOff, X, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Mic, MicOff, X, MessageSquare, RefreshCw, User } from 'lucide-react';
 import './ChatWidget.css';
 
 interface Message {
@@ -22,6 +22,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const botName = "Taylor";
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -35,7 +36,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     if (messages.length === 0) {
       setMessages([
         {
-          content: "Hello! How can I help you today?",
+          content: "Welcome 👋! How can I help you today?",
           isUser: false,
           timestamp: new Date()
         }
@@ -151,32 +152,53 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
           reader.onloadend = async () => {
             const base64Audio = reader.result as string;
             
-            // In a real implementation, you would:
-            // 1. Send the audio to a speech-to-text service
-            // 2. Get the transcription
-            // 3. Send the transcription to n8n
-            
             // For demo purposes, we'll just send a placeholder message
             const transcription = "This is where your voice transcription would appear";
             
             // Remove the processing message
             setMessages(prev => prev.filter(msg => msg !== processingMessage));
             
-            // Send the transcribed message
-            await sendMessage(transcription);
+            // Add the transcribed message as a user message
+            const userMessage: Message = {
+              content: transcription,
+              isUser: true,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, userMessage]);
             
-            // Send the audio data to n8n webhook
-            await fetch(n8nWebhookURL, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                audioData: base64Audio,
-                type: 'audio',
-                timestamp: new Date().toISOString()
-              }),
-            });
+            // Send the transcribed message to n8n webhook
+            try {
+              await fetch(n8nWebhookURL, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  message: transcription,
+                  audioData: base64Audio,
+                  type: 'audio',
+                  timestamp: new Date().toISOString()
+                }),
+              });
+              
+              // Add a response from the bot
+              setTimeout(() => {
+                const botMessage: Message = {
+                  content: "I've received your voice message and I'm processing it.",
+                  isUser: false,
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, botMessage]);
+              }, 500);
+            } catch (error) {
+              console.error('Error sending audio:', error);
+              const errorMessage: Message = {
+                content: "Sorry, there was an error processing your voice message.",
+                isUser: false,
+                timestamp: new Date()
+              };
+              setMessages(prev => [...prev, errorMessage]);
+            }
           };
         } catch (error) {
           console.error('Error processing audio:', error);
@@ -232,13 +254,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   return (
     <div className={`chat-widget-container ${isOpen ? 'open' : 'closing'}`}>
       <div className="chat-widget-header">
-        <div className="chat-widget-title">Chat Support</div>
+        <div className="chat-widget-title">Google</div>
         <div className="chat-widget-controls">
-          {isMinimized ? (
-            <ChevronUp className="chat-widget-control-icon" onClick={toggleWidget} />
-          ) : (
-            <ChevronDown className="chat-widget-control-icon" onClick={toggleWidget} />
-          )}
+          <User className="chat-widget-control-icon" />
+          <RefreshCw className="chat-widget-control-icon" />
           <X className="chat-widget-control-icon" onClick={handleClose} />
         </div>
       </div>
@@ -251,23 +270,22 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
                 key={index} 
                 className={`chat-widget-message ${message.isUser ? 'user' : 'bot'}`}
               >
+                {!message.isUser && (
+                  <div className="chat-widget-bot-header">
+                    <div className="chat-widget-bot-avatar">
+                      <User size={18} />
+                    </div>
+                    <div className="chat-widget-bot-name">{botName}</div>
+                  </div>
+                )}
                 <div className="chat-widget-message-content">{message.content}</div>
-                <div className="chat-widget-message-time">{formatTime(message.timestamp)}</div>
               </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
           
           <div className="chat-widget-input">
-            <input
-              type="text"
-              placeholder="Type your message here..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isRecording}
-            />
-            <div className="chat-widget-actions">
+            <div className="chat-widget-input-container">
               {isRecording ? (
                 <button 
                   className="chat-widget-mic-button recording" 
@@ -285,6 +303,14 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
                   <Mic size={18} />
                 </button>
               )}
+              <input
+                type="text"
+                placeholder="Type your message..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isRecording}
+              />
               <button 
                 className="chat-widget-send-button"
                 onClick={handleSendClick}
@@ -294,6 +320,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
                 <Send size={18} />
               </button>
             </div>
+          </div>
+          
+          <div className="chat-widget-footer">
+            Add AI chat to your site
           </div>
         </>
       )}

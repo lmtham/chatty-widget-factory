@@ -18,7 +18,7 @@
     display: flex;
     flex-direction: column;
     background-color: white;
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     z-index: 9999;
@@ -45,20 +45,20 @@
     right: 20px;
     width: 60px;
     height: 60px;
-    background-color: #007aff;
+    background-color: #4caf50;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
     transition: all 0.2s ease;
     z-index: 9999;
   }
 
   .chat-widget-bubble:hover {
     transform: scale(1.05);
-    box-shadow: 0 6px 16px rgba(0, 122, 255, 0.4);
+    box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
   }
 
   .chat-widget-bubble-icon {
@@ -73,15 +73,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px;
-    background-color: #007aff;
+    background-color: #4caf50;
     color: white;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
   }
 
   .chat-widget-title {
     font-weight: 600;
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .chat-widget-controls {
@@ -109,13 +109,13 @@
     padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    background-color: #f5f7fa;
+    gap: 16px;
+    background-color: white;
   }
 
   .chat-widget-message {
-    max-width: 80%;
-    padding: 12px 16px;
+    max-width: 85%;
+    padding: 14px 16px;
     border-radius: 16px;
     position: relative;
     word-wrap: break-word;
@@ -124,17 +124,42 @@
 
   .chat-widget-message.user {
     align-self: flex-end;
-    background-color: #007aff;
-    color: white;
+    background-color: #f0f0f0;
+    color: #333;
     border-bottom-right-radius: 4px;
   }
 
   .chat-widget-message.bot {
     align-self: flex-start;
-    background-color: white;
+    background-color: #f9f9f9;
     color: #333;
     border-bottom-left-radius: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-widget-bot-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .chat-widget-bot-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #4caf50;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+  }
+
+  .chat-widget-bot-name {
+    font-weight: 600;
+    color: #333;
   }
 
   .chat-widget-message-content {
@@ -143,7 +168,7 @@
 
   .chat-widget-message-time {
     font-size: 10px;
-    opacity: 0.8;
+    opacity: 0.6;
     margin-top: 4px;
     text-align: right;
   }
@@ -151,9 +176,20 @@
   /* Chat Widget Input Area */
   .chat-widget-input {
     padding: 12px;
-    border-top: 1px solid #eaeaea;
+    border-top: 1px solid #f0f0f0;
     display: flex;
     background-color: white;
+    position: relative;
+  }
+
+  .chat-widget-input-container {
+    flex: 1;
+    position: relative;
+    border-radius: 24px;
+    background-color: #f5f5f5;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
   }
 
   .chat-widget-input input {
@@ -161,22 +197,38 @@
     border: none;
     outline: none;
     padding: 10px;
-    border-radius: 20px;
-    background-color: #f0f2f5;
+    background-color: transparent;
     font-size: 14px;
-  }
-
-  .chat-widget-input input:focus {
-    background-color: #e8eaed;
   }
 
   .chat-widget-actions {
     display: flex;
     align-items: center;
-    margin-left: 8px;
   }
 
-  .chat-widget-send-button, 
+  .chat-widget-send-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background-color: #f5f5f5;
+    color: #ababab;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .chat-widget-send-button:hover {
+    background-color: #e0e0e0;
+  }
+
+  .chat-widget-send-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .chat-widget-mic-button {
     display: flex;
     align-items: center;
@@ -185,32 +237,40 @@
     height: 36px;
     border-radius: 50%;
     border: none;
-    background-color: #007aff;
-    color: white;
+    background-color: transparent;
+    color: #ababab;
     cursor: pointer;
-    margin-left: 8px;
+    margin-right: 4px;
     transition: all 0.2s ease;
   }
 
-  .chat-widget-send-button:hover, 
   .chat-widget-mic-button:hover {
-    background-color: #0062cc;
+    background-color: #f0f0f0;
   }
 
-  .chat-widget-send-button:disabled, 
   .chat-widget-mic-button:disabled {
-    background-color: #ccd0d5;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 
   .chat-widget-mic-button.recording {
-    background-color: #ff3b30;
+    background-color: rgba(255, 59, 48, 0.1);
+    color: #ff3b30;
     animation: pulse 1.5s infinite;
+  }
+
+  .chat-widget-footer {
+    padding: 10px 16px;
+    text-align: center;
+    color: #ababab;
+    font-size: 12px;
+    background-color: white;
+    border-top: 1px solid #f0f0f0;
   }
 
   @keyframes pulse {
     0% {
-      box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+      box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4);
     }
     70% {
       box-shadow: 0 0 0 6px rgba(255, 59, 48, 0);
@@ -228,8 +288,8 @@
     mic: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>',
     micOff: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>',
     x: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-    chevronDown: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>',
-    chevronUp: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>'
+    user: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+    refreshCw: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>'
   };
 
   // Create DOM elements
@@ -260,10 +320,11 @@
     let mediaRecorder = null;
     let audioChunks = [];
     let isRecording = false;
+    const botName = "Taylor";
     
     // Add the initial message from the bot
     messages.push({
-      content: "Hello! How can I help you today?",
+      content: "Welcome 👋! How can I help you today?",
       isUser: false,
       timestamp: new Date()
     });
@@ -306,12 +367,10 @@
     function renderWidget() {
       container.innerHTML = `
         <div class="chat-widget-header">
-          <div class="chat-widget-title">Chat Support</div>
+          <div class="chat-widget-title">Google</div>
           <div class="chat-widget-controls">
-            ${isMinimized ? 
-              `<div class="chat-widget-control-icon">${icons.chevronUp}</div>` : 
-              `<div class="chat-widget-control-icon">${icons.chevronDown}</div>`
-            }
+            <div class="chat-widget-control-icon">${icons.user}</div>
+            <div class="chat-widget-control-icon">${icons.refreshCw}</div>
             <div class="chat-widget-control-icon">${icons.x}</div>
           </div>
         </div>
@@ -320,25 +379,32 @@
           <div class="chat-widget-messages">
             ${messages.map(message => `
               <div class="chat-widget-message ${message.isUser ? 'user' : 'bot'}">
+                ${!message.isUser ? `
+                  <div class="chat-widget-bot-header">
+                    <div class="chat-widget-bot-avatar">
+                      ${icons.user}
+                    </div>
+                    <div class="chat-widget-bot-name">${botName}</div>
+                  </div>
+                ` : ''}
                 <div class="chat-widget-message-content">${message.content}</div>
-                <div class="chat-widget-message-time">${formatTime(message.timestamp)}</div>
               </div>
             `).join('')}
           </div>
           
           <div class="chat-widget-input">
-            <input 
-              type="text" 
-              placeholder="Type your message here..." 
-              ${isRecording ? 'disabled' : ''}
-            />
-            <div class="chat-widget-actions">
+            <div class="chat-widget-input-container">
               <button 
                 class="chat-widget-mic-button ${isRecording ? 'recording' : ''}" 
                 aria-label="${isRecording ? 'Stop recording' : 'Start recording'}"
               >
                 ${isRecording ? icons.micOff : icons.mic}
               </button>
+              <input 
+                type="text" 
+                placeholder="Type your message..." 
+                ${isRecording ? 'disabled' : ''}
+              />
               <button 
                 class="chat-widget-send-button" 
                 aria-label="Send message"
@@ -348,17 +414,15 @@
               </button>
             </div>
           </div>
+          
+          <div class="chat-widget-footer">
+            Add AI chat to your site
+          </div>
         ` : ''}
       `;
       
       // Add event listeners after rendering
       if (!isMinimized) {
-        // Minimize button
-        container.querySelector('.chat-widget-control-icon:first-child').addEventListener('click', () => {
-          isMinimized = !isMinimized;
-          renderWidget();
-        });
-        
         // Close button
         container.querySelector('.chat-widget-control-icon:last-child').addEventListener('click', closeWidget);
         
@@ -381,6 +445,7 @@
             const sendButton = container.querySelector('.chat-widget-send-button');
             if (sendButton) {
               sendButton.disabled = !input.value.trim() || isRecording;
+              sendButton.style.color = input.value.trim() && !isRecording ? '#4caf50' : '#ababab';
             }
           });
         }
@@ -394,6 +459,7 @@
               sendMessage(text);
               input.value = '';
               sendButton.disabled = true;
+              sendButton.style.color = '#ababab';
             }
           });
         }
@@ -587,10 +653,6 @@
         isRecording = false;
         renderWidget();
       }
-    }
-    
-    function formatTime(date) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
     
     widgetInitialized = true;
