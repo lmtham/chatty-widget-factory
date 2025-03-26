@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import ChatWidget from '@/components/ChatWidget';
 import { Toaster } from '@/components/ui/toaster';
+import { toast } from '@/hooks/use-toast';
 
 const Index = () => {
   // State for the n8n webhook URL input
@@ -13,7 +14,22 @@ const Index = () => {
 
   const activateWidget = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!webhookURL.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid n8n webhook URL",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsWidgetActive(true);
+    
+    toast({
+      title: "Chat Widget Activated",
+      description: "The chat widget is now active in the bottom-right corner.",
+    });
   };
 
   return (
@@ -42,11 +58,17 @@ const Index = () => {
               Activate Widget
             </button>
           </div>
+          <p className="text-sm text-gray-600 mt-2">
+            Example n8n webhook URL: <code className="bg-gray-100 px-2 py-1 rounded">https://n8n.example.com/webhook/abc-123-def</code>
+          </p>
         </form>
       ) : (
         <div className="bg-green-100 border-l-4 border-green-500 p-4 mb-8 max-w-lg">
           <p className="text-green-700">
             Chat widget is active! Look for it in the bottom-right corner of the page.
+          </p>
+          <p className="text-green-600 mt-2 text-sm">
+            Using webhook: <code className="bg-white px-2 py-1 rounded">{webhookURL}</code>
           </p>
         </div>
       )}

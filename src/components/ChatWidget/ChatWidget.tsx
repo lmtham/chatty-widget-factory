@@ -115,14 +115,31 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
-      // Process the response - n8n typically returns JSON
-      const responseData = await response.json();
+      // Process the response - n8n typically returns JSON but can also return text
+      let responseData;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        const textResponse = await response.text();
+        try {
+          // Try to parse it as JSON anyway (some servers misconfigure content-type)
+          responseData = JSON.parse(textResponse);
+        } catch (e) {
+          // If it's not JSON, use it as plain text
+          responseData = textResponse;
+        }
+      }
       
       // Handle various response formats from n8n
       let botResponseText = '';
       
       if (typeof responseData === 'string') {
         botResponseText = responseData;
+      } else if (responseData.output) {
+        // Handle n8n AI response format
+        botResponseText = responseData.output;
       } else if (responseData.message) {
         botResponseText = responseData.message;
       } else if (responseData.response) {
@@ -132,9 +149,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
       } else if (responseData.content) {
         botResponseText = responseData.content;
       } else {
-        // Fallback if response format is unknown
-        botResponseText = "I've received your message, but I'm not sure how to process the response.";
         console.warn('Unrecognized response format from n8n:', responseData);
+        botResponseText = "I've received your message, but I'm not sure how to process the response.";
       }
       
       // Add the bot response

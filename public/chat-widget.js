@@ -541,7 +541,21 @@
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
-        return response.json();
+        // Check content type to handle both JSON and text responses
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return response.json();
+        } else {
+          return response.text().then(text => {
+            try {
+              // Try to parse as JSON anyway (some servers misconfigure content-type)
+              return JSON.parse(text);
+            } catch (e) {
+              // If it's not valid JSON, return as plain text
+              return text;
+            }
+          });
+        }
       })
       .then(data => {
         // Process the response from n8n
@@ -549,6 +563,9 @@
         
         if (typeof data === 'string') {
           botResponseText = data;
+        } else if (data.output) {
+          // This is the n8n AI format
+          botResponseText = data.output;
         } else if (data.message) {
           botResponseText = data.message;
         } else if (data.response) {
