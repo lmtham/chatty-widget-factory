@@ -6,6 +6,9 @@ const Index = () => {
   // This is a placeholder for the n8n webhook URL that you'll replace later
   const n8nWebhookURL = 'YOUR_N8N_WEBHOOK_URL';
 
+  // Get the current domain for use in the embed script example
+  const currentDomain = window.location.origin;
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <h1 className="text-4xl font-bold mb-6 text-gray-900">Embeddable Chat Widget</h1>
@@ -20,15 +23,18 @@ const Index = () => {
           To add this chat widget to your website, copy the following code snippet and paste it before the closing &lt;/body&gt; tag:
         </p>
         <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-sm mb-4">
-          {`<script src="https://your-domain.com/chat-widget.js"></script>
+          {`<script src="${currentDomain}/chat-widget.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', function() {
     initChatWidget('YOUR_N8N_WEBHOOK_URL');
   });
 </script>`}
         </pre>
-        <p className="text-gray-700">
+        <p className="text-gray-700 mb-4">
           Replace <code className="bg-gray-100 px-2 py-1 rounded">YOUR_N8N_WEBHOOK_URL</code> with your actual n8n webhook URL.
+        </p>
+        <p className="text-red-600 font-medium">
+          Important: Make sure the script is accessible at <code className="bg-gray-100 px-2 py-1 rounded">{currentDomain}/chat-widget.js</code>
         </p>
       </div>
       
