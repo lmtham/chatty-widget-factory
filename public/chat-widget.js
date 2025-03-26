@@ -1,9 +1,9 @@
-
 (function() {
   // Configuration
   let n8nWebhookURL = 'YOUR_N8N_WEBHOOK_URL';
   let widgetInitialized = false;
   let sessionId = crypto.randomUUID(); // Generate a random session ID once
+  let waitingForResponse = false;
   
   // Styles
   const styles = `
@@ -375,9 +375,8 @@
     function renderWidget() {
       container.innerHTML = `
         <div class="chat-widget-header">
-          <div class="chat-widget-title">Google</div>
+          <div class="chat-widget-title">Chat Assistant</div>
           <div class="chat-widget-controls">
-            <div class="chat-widget-control-icon">${icons.user}</div>
             <div class="chat-widget-control-icon">${icons.refreshCw}</div>
             <div class="chat-widget-control-icon">${icons.x}</div>
           </div>
@@ -405,19 +404,20 @@
               <button 
                 class="chat-widget-mic-button ${isRecording ? 'recording' : ''}" 
                 aria-label="${isRecording ? 'Stop recording' : 'Start recording'}"
+                ${waitingForResponse ? 'disabled' : ''}
               >
                 ${isRecording ? icons.micOff : icons.mic}
               </button>
               <input 
                 type="text" 
-                placeholder="Type your message..." 
-                ${isRecording ? 'disabled' : ''}
+                placeholder="${waitingForResponse ? 'Waiting for response...' : 'Type your message...'}" 
+                ${isRecording || waitingForResponse ? 'disabled' : ''}
                 value="${isTranscribing ? '...' : ''}"
               />
               <button 
                 class="chat-widget-send-button" 
                 aria-label="Send message"
-                ${!document.querySelector('.chat-widget-input input')?.value?.trim() || isRecording ? 'disabled' : ''}
+                ${!document.querySelector('.chat-widget-input input')?.value?.trim() || isRecording || waitingForResponse ? 'disabled' : ''}
               >
                 ${icons.send}
               </button>
@@ -442,7 +442,7 @@
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               const text = input.value.trim();
-              if (text && !isRecording) {
+              if (text && !isRecording && !waitingForResponse) {
                 sendMessage(text);
                 input.value = '';
               }
@@ -453,8 +453,8 @@
           input.addEventListener('input', () => {
             const sendButton = container.querySelector('.chat-widget-send-button');
             if (sendButton) {
-              sendButton.disabled = !input.value.trim() || isRecording;
-              sendButton.style.color = input.value.trim() && !isRecording ? '#4caf50' : '#ababab';
+              sendButton.disabled = !input.value.trim() || isRecording || waitingForResponse;
+              sendButton.style.color = input.value.trim() && !isRecording && !waitingForResponse ? '#4caf50' : '#ababab';
             }
           });
         }
@@ -464,7 +464,7 @@
         if (sendButton) {
           sendButton.addEventListener('click', () => {
             const text = input.value.trim();
-            if (text && !isRecording) {
+            if (text && !isRecording && !waitingForResponse) {
               sendMessage(text);
               input.value = '';
               sendButton.disabled = true;
@@ -479,7 +479,7 @@
           micButton.addEventListener('click', () => {
             if (isRecording) {
               stopRecording();
-            } else {
+            } else if (!waitingForResponse) {
               startRecording();
             }
           });
@@ -501,6 +501,15 @@
         timestamp: new Date()
       });
       
+      // Add typing indicator
+      const typingIndicator = {
+        content: "...",
+        isUser: false,
+        timestamp: new Date()
+      };
+      
+      messages.push(typingIndicator);
+      waitingForResponse = true;
       renderWidget();
       
       // Send to n8n webhook with the additional requested information
@@ -519,27 +528,47 @@
         }),
       })
       .then(response => {
+        // Remove typing indicator
+        const typingIndex = messages.indexOf(typingIndicator);
+        if (typingIndex !== -1) {
+          messages.splice(typingIndex, 1);
+        }
+        
         if (response.ok) {
-          // In a real app, you would get a response from your n8n workflow
-          // For now, we'll just add a placeholder response
-          setTimeout(() => {
-            messages.push({
-              content: "Thank you for your message. I'm processing your request.",
-              isUser: false,
-              timestamp: new Date()
+          return response.json()
+            .catch(() => response.text())
+            .then(data => {
+              let botResponse;
+              
+              if (typeof data === 'object') {
+                // Handle JSON response
+                botResponse = data.message || data.response || "I've received your message.";
+              } else {
+                // Handle text response
+                botResponse = data || "Thank you for your message. I'm processing your request.";
+              }
+              
+              messages.push({
+                content: botResponse,
+                isUser: false,
+                timestamp: new Date()
+              });
             });
-            renderWidget();
-          }, 500);
+        } else {
+          throw new Error('Error response from webhook: ' + response.status);
         }
       })
       .catch(error => {
         console.error('Error sending message:', error);
         
         messages.push({
-          content: "Sorry, there was an error sending your message.",
+          content: "Sorry, there was an error processing your message.",
           isUser: false,
           timestamp: new Date()
         });
+      })
+      .finally(() => {
+        waitingForResponse = false;
         renderWidget();
       });
     }
@@ -659,22 +688,39 @@
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                  action: 'sendMessage',
+                  sessionId: sessionId,
+                  chatInput: transcription,
                   message: transcription,
                   audioData: base64Audio,
                   type: 'audio',
                   timestamp: new Date().toISOString()
                 }),
               })
-              .then(() => {
-                // Add a response from the bot
-                setTimeout(() => {
-                  messages.push({
-                    content: "I've received your voice message and I'm processing it.",
-                    isUser: false,
-                    timestamp: new Date()
-                  });
-                  renderWidget();
-                }, 500);
+              .then(response => {
+                if (response.ok) {
+                  return response.json()
+                    .catch(() => response.text())
+                    .then(data => {
+                      let botResponse;
+                      
+                      if (typeof data === 'object') {
+                        // Handle JSON response
+                        botResponse = data.message || data.response || "I've received your voice message and I'm processing it.";
+                      } else {
+                        // Handle text response
+                        botResponse = data || "I've received your voice message and I'm processing it.";
+                      }
+                      
+                      messages.push({
+                        content: botResponse,
+                        isUser: false,
+                        timestamp: new Date()
+                      });
+                    });
+                } else {
+                  throw new Error('Error response from webhook: ' + response.status);
+                }
               })
               .catch(error => {
                 console.error('Error sending audio:', error);
@@ -683,6 +729,8 @@
                   isUser: false,
                   timestamp: new Date()
                 });
+              })
+              .finally(() => {
                 renderWidget();
               });
             };

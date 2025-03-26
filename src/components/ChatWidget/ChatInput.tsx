@@ -10,6 +10,7 @@ interface ChatInputProps {
   stopRecording: () => void;
   sendMessage: () => void;
   handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -19,7 +20,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   startRecording,
   stopRecording,
   sendMessage,
-  handleKeyDown
+  handleKeyDown,
+  disabled = false
 }) => {
   return (
     <div className="chat-widget-input">
@@ -29,6 +31,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             className="chat-widget-mic-button recording" 
             onClick={stopRecording}
             aria-label="Stop recording"
+            disabled={disabled}
           >
             <MicOff size={18} />
           </button>
@@ -37,22 +40,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
             className="chat-widget-mic-button"
             onClick={startRecording}
             aria-label="Start recording"
+            disabled={disabled}
           >
             <Mic size={18} />
           </button>
         )}
         <input
           type="text"
-          placeholder="Type your message..."
+          placeholder={disabled ? "Waiting for response..." : "Type your message..."}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isRecording}
+          disabled={isRecording || disabled}
         />
         <button 
           className="chat-widget-send-button"
           onClick={sendMessage}
-          disabled={!inputText.trim() || isRecording}
+          disabled={!inputText.trim() || isRecording || disabled}
           aria-label="Send message"
         >
           <Send size={18} />

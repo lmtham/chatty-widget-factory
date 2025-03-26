@@ -23,6 +23,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
   const [sessionId] = useState(() => crypto.randomUUID()); // Generate a random session ID once
+  const [waitingForResponse, setWaitingForResponse] = useState(false);
   const botName = "Taylor";
 
   // Add initial welcome message
@@ -74,8 +75,18 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
+    setWaitingForResponse(true);
 
     try {
+      // Add a typing indicator
+      const typingMessage: Message = {
+        content: "...",
+        isUser: false,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, typingMessage]);
+
       // Send to n8n webhook with the additional requested information
       const response = await fetch(n8nWebhookURL, {
         method: 'POST',
@@ -92,17 +103,45 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
         }),
       });
 
+      // Remove typing indicator
+      setMessages(prev => prev.filter(msg => msg !== typingMessage));
+
       if (response.ok) {
-        // In a real app, you would get a response from your n8n workflow
-        // For now, we'll just add a placeholder response
-        setTimeout(() => {
+        try {
+          // Try to parse the response as JSON
+          const responseData = await response.json();
+          
+          // Add the bot response from n8n
           const botMessage: Message = {
-            content: "Thank you for your message. I'm processing your request.",
+            content: responseData.message || responseData.response || "I've received your message.",
             isUser: false,
             timestamp: new Date()
           };
+          
           setMessages(prev => [...prev, botMessage]);
-        }, 500);
+        } catch (jsonError) {
+          // If the response is not JSON, use the text
+          const responseText = await response.text();
+          
+          const botMessage: Message = {
+            content: responseText || "Thank you for your message. I'm processing your request.",
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, botMessage]);
+        }
+      } else {
+        // Handle error response
+        console.error('Error response from webhook:', response.status);
+        
+        const errorMessage: Message = {
+          content: "Sorry, there was an error processing your message.",
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -112,7 +151,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
         isUser: false,
         timestamp: new Date()
       };
+      
       setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setWaitingForResponse(false);
     }
   };
 
@@ -151,6 +193,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
             stopRecording={stopRecording}
             sendMessage={handleSendClick}
             handleKeyDown={handleKeyDown}
+            disabled={waitingForResponse}
           />
           
           <div className="chat-widget-footer">
