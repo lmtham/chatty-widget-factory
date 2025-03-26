@@ -22,6 +22,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const [inputText, setInputText] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
+  const [sessionId] = useState(() => crypto.randomUUID()); // Generate a random session ID once
   const botName = "Taylor";
 
   // Add initial welcome message
@@ -75,13 +76,16 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
     setInputText('');
 
     try {
-      // Send to n8n webhook
+      // Send to n8n webhook with the additional requested information
       const response = await fetch(n8nWebhookURL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'sendMessage',
+          sessionId: sessionId,
+          chatInput: content,
           message: content,
           type: 'text',
           timestamp: new Date().toISOString()

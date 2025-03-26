@@ -1,7 +1,9 @@
+
 (function() {
   // Configuration
   let n8nWebhookURL = 'YOUR_N8N_WEBHOOK_URL';
   let widgetInitialized = false;
+  let sessionId = crypto.randomUUID(); // Generate a random session ID once
   
   // Styles
   const styles = `
@@ -501,13 +503,16 @@
       
       renderWidget();
       
-      // Send to n8n webhook
+      // Send to n8n webhook with the additional requested information
       fetch(n8nWebhookURL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'sendMessage',
+          sessionId: sessionId,
+          chatInput: content,
           message: content,
           type: 'text',
           timestamp: new Date().toISOString()
