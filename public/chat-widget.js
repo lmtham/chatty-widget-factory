@@ -512,20 +512,23 @@
       waitingForResponse = true;
       renderWidget();
       
-      // Send to n8n webhook with the additional requested information
+      // Prepare payload for n8n webhook
+      const payload = {
+        action: 'sendMessage',
+        sessionId: sessionId,
+        chatInput: content,
+        message: content,
+        type: 'text',
+        timestamp: new Date().toISOString()
+      };
+      
+      // Send to n8n webhook
       fetch(n8nWebhookURL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'sendMessage',
-          sessionId: sessionId,
-          chatInput: content,
-          message: content,
-          type: 'text',
-          timestamp: new Date().toISOString()
-        }),
+        body: JSON.stringify(payload),
       })
       .then(response => {
         // Remove typing indicator
@@ -534,35 +537,43 @@
           messages.splice(typingIndex, 1);
         }
         
-        if (response.ok) {
-          return response.json()
-            .catch(() => response.text())
-            .then(data => {
-              let botResponse;
-              
-              if (typeof data === 'object') {
-                // Handle JSON response
-                botResponse = data.message || data.response || "I've received your message.";
-              } else {
-                // Handle text response
-                botResponse = data || "Thank you for your message. I'm processing your request.";
-              }
-              
-              messages.push({
-                content: botResponse,
-                isUser: false,
-                timestamp: new Date()
-              });
-            });
-        } else {
-          throw new Error('Error response from webhook: ' + response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
         }
+        
+        return response.json();
+      })
+      .then(data => {
+        // Process the response from n8n
+        let botResponseText = '';
+        
+        if (typeof data === 'string') {
+          botResponseText = data;
+        } else if (data.message) {
+          botResponseText = data.message;
+        } else if (data.response) {
+          botResponseText = data.response;
+        } else if (data.text) {
+          botResponseText = data.text;
+        } else if (data.content) {
+          botResponseText = data.content;
+        } else {
+          // Fallback if response format is unknown
+          botResponseText = "I've received your message, but I'm not sure how to process the response.";
+          console.warn('Unrecognized response format from n8n:', data);
+        }
+        
+        messages.push({
+          content: botResponseText,
+          isUser: false,
+          timestamp: new Date()
+        });
       })
       .catch(error => {
         console.error('Error sending message:', error);
         
         messages.push({
-          content: "Sorry, there was an error processing your message.",
+          content: "Sorry, there was an error communicating with the server.",
           isUser: false,
           timestamp: new Date()
         });

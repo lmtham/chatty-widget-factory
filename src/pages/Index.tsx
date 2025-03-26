@@ -1,21 +1,55 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import ChatWidget from '@/components/ChatWidget';
+import { Toaster } from '@/components/ui/toaster';
 
 const Index = () => {
-  // This is a placeholder for the n8n webhook URL that you'll replace later
-  const n8nWebhookURL = 'YOUR_N8N_WEBHOOK_URL';
+  // State for the n8n webhook URL input
+  const [webhookURL, setWebhookURL] = useState('');
+  const [isWidgetActive, setIsWidgetActive] = useState(false);
 
   // Get the current domain for use in the embed script example
   const currentDomain = window.location.origin;
+
+  const activateWidget = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsWidgetActive(true);
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <h1 className="text-4xl font-bold mb-6 text-gray-900">Embeddable Chat Widget</h1>
       <p className="text-lg text-center max-w-2xl mb-8 text-gray-600">
         This is a demonstration of the chat widget embedded in a page. 
-        The widget appears in the bottom-right corner.
+        {!isWidgetActive && " Enter your n8n webhook URL below to activate the widget."}
       </p>
+      
+      {!isWidgetActive ? (
+        <form onSubmit={activateWidget} className="w-full max-w-lg mb-8">
+          <div className="flex flex-col md:flex-row gap-4">
+            <input
+              type="url"
+              value={webhookURL}
+              onChange={(e) => setWebhookURL(e.target.value)}
+              placeholder="Enter your n8n webhook URL"
+              className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+              required
+            />
+            <button
+              type="submit"
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Activate Widget
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="bg-green-100 border-l-4 border-green-500 p-4 mb-8 max-w-lg">
+          <p className="text-green-700">
+            Chat widget is active! Look for it in the bottom-right corner of the page.
+          </p>
+        </div>
+      )}
       
       <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg">
         <h2 className="text-2xl font-semibold mb-4 text-gray-800">How to Embed This Widget</h2>
@@ -38,8 +72,11 @@ const Index = () => {
         </p>
       </div>
       
-      {/* Include the chat widget */}
-      <ChatWidget n8nWebhookURL={n8nWebhookURL} />
+      {/* Include the chat widget only if activated */}
+      {isWidgetActive && <ChatWidget n8nWebhookURL={webhookURL} />}
+      
+      {/* Toaster for notifications */}
+      <Toaster />
     </div>
   );
 };

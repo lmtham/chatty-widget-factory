@@ -6,6 +6,7 @@ import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import ChatHeader from './ChatHeader';
+import { useToast } from '../../hooks/use-toast';
 
 interface Message {
   content: string;
@@ -22,8 +23,9 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
   const [inputText, setInputText] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
-  const [sessionId] = useState(() => crypto.randomUUID()); // Generate a random session ID once
+  const [sessionId] = useState(() => crypto.randomUUID());
   const [waitingForResponse, setWaitingForResponse] = useState(false);
+  const { toast } = useToast();
   const botName = "Taylor";
 
   // Add initial welcome message
@@ -87,72 +89,80 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ n8nWebhookURL }) => {
       
       setMessages(prev => [...prev, typingMessage]);
 
-      // Send to n8n webhook with the additional requested information
+      // Prepare the payload according to n8n chat widget format
+      const payload = {
+        action: 'sendMessage',
+        sessionId: sessionId,
+        chatInput: content,
+        message: content,
+        type: 'text',
+        timestamp: new Date().toISOString()
+      };
+
+      // Send to n8n webhook
       const response = await fetch(n8nWebhookURL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'sendMessage',
-          sessionId: sessionId,
-          chatInput: content,
-          message: content,
-          type: 'text',
-          timestamp: new Date().toISOString()
-        }),
+        body: JSON.stringify(payload),
       });
 
       // Remove typing indicator
       setMessages(prev => prev.filter(msg => msg !== typingMessage));
 
-      if (response.ok) {
-        try {
-          // Try to parse the response as JSON
-          const responseData = await response.json();
-          
-          // Add the bot response from n8n
-          const botMessage: Message = {
-            content: responseData.message || responseData.response || "I've received your message.",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, botMessage]);
-        } catch (jsonError) {
-          // If the response is not JSON, use the text
-          const responseText = await response.text();
-          
-          const botMessage: Message = {
-            content: responseText || "Thank you for your message. I'm processing your request.",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, botMessage]);
-        }
-      } else {
-        // Handle error response
-        console.error('Error response from webhook:', response.status);
-        
-        const errorMessage: Message = {
-          content: "Sorry, there was an error processing your message.",
-          isUser: false,
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, errorMessage]);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
+
+      // Process the response - n8n typically returns JSON
+      const responseData = await response.json();
+      
+      // Handle various response formats from n8n
+      let botResponseText = '';
+      
+      if (typeof responseData === 'string') {
+        botResponseText = responseData;
+      } else if (responseData.message) {
+        botResponseText = responseData.message;
+      } else if (responseData.response) {
+        botResponseText = responseData.response;
+      } else if (responseData.text) {
+        botResponseText = responseData.text;
+      } else if (responseData.content) {
+        botResponseText = responseData.content;
+      } else {
+        // Fallback if response format is unknown
+        botResponseText = "I've received your message, but I'm not sure how to process the response.";
+        console.warn('Unrecognized response format from n8n:', responseData);
+      }
+      
+      // Add the bot response
+      const botMessage: Message = {
+        content: botResponseText,
+        isUser: false,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       
+      // Display error in chat
       const errorMessage: Message = {
-        content: "Sorry, there was an error sending your message.",
+        content: "Sorry, there was an error communicating with the server.",
         isUser: false,
         timestamp: new Date()
       };
       
       setMessages(prev => [...prev, errorMessage]);
+      
+      // Also show a toast notification
+      toast({
+        title: "Connection Error",
+        description: "Failed to receive a response from the server. Please check your connection and try again.",
+        variant: "destructive",
+      });
     } finally {
       setWaitingForResponse(false);
     }
